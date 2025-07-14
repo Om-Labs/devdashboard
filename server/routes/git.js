@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { extractProjectDirectory } from '../projects.js';
+import { extractProjectDirectory, loadProjectConfig } from '../projects.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -11,10 +11,18 @@ const execAsync = promisify(exec);
 // Helper function to get the actual project path from the encoded project name
 async function getActualProjectPath(projectName) {
   try {
+    // First check if this is an auto-discovered or manually added project in config
+    const config = await loadProjectConfig();
+    if (config[projectName] && config[projectName].originalPath) {
+      console.log(`📁 Using configured path for ${projectName}: ${config[projectName].originalPath}`);
+      return config[projectName].originalPath;
+    }
+    
+    // Fallback to session-based extraction
     return await extractProjectDirectory(projectName);
   } catch (error) {
     console.error(`Error extracting project directory for ${projectName}:`, error);
-    // Fallback to the old method
+    // Final fallback to the old method
     return projectName.replace(/-/g, '/');
   }
 }
