@@ -164,18 +164,39 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Add model for new sessions
     if (!resume) {
-      args.push('--model', 'sonnet');
+      const defaultModel = process.env.CLAUDE_DEFAULT_MODEL || 'sonnet';
+      args.push('--model', defaultModel);
     }
     
     // Add permission mode if specified (works for both new and resumed sessions)
-    if (permissionMode && permissionMode !== 'default') {
-      args.push('--permission-mode', permissionMode);
-      console.log('🔒 Using permission mode:', permissionMode);
+    const finalPermissionMode = permissionMode || process.env.CLAUDE_PERMISSION_MODE;
+    if (finalPermissionMode && finalPermissionMode !== 'default') {
+      args.push('--permission-mode', finalPermissionMode);
+      console.log('🔒 Using permission mode:', finalPermissionMode);
+    }
+    
+    // Add additional directories from environment
+    if (process.env.CLAUDE_ADDITIONAL_DIRS) {
+      const additionalDirs = process.env.CLAUDE_ADDITIONAL_DIRS.split(',').map(dir => dir.trim());
+      for (const dir of additionalDirs) {
+        if (dir) {
+          args.push('--add-dir', dir);
+          console.log('📁 Adding directory access:', dir);
+        }
+      }
+    }
+    
+    // Add system prompt from environment
+    if (process.env.CLAUDE_SYSTEM_PROMPT) {
+      args.push('--append-system-prompt', process.env.CLAUDE_SYSTEM_PROMPT);
+      console.log('📝 Using custom system prompt');
     }
     
     // Add tools settings flags
     // Don't use --dangerously-skip-permissions when in plan mode
-    if (settings.skipPermissions && permissionMode !== 'plan') {
+    const shouldSkipPermissions = settings.skipPermissions || 
+      (process.env.CLAUDE_SKIP_PERMISSIONS === 'true');
+    if (shouldSkipPermissions && finalPermissionMode !== 'plan') {
       args.push('--dangerously-skip-permissions');
       console.log('⚠️  Using --dangerously-skip-permissions (skipping other tool settings)');
     } else {
@@ -185,7 +206,7 @@ async function spawnClaude(command, options = {}, ws) {
       let allowedTools = [...(settings.allowedTools || [])];
       
       // Add plan mode specific tools
-      if (permissionMode === 'plan') {
+      if (finalPermissionMode === 'plan') {
         const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
         // Add plan mode tools that aren't already in the allowed list
         for (const tool of planModeTools) {
@@ -213,7 +234,7 @@ async function spawnClaude(command, options = {}, ws) {
       }
       
       // Log when skip permissions is disabled due to plan mode
-      if (settings.skipPermissions && permissionMode === 'plan') {
+      if (shouldSkipPermissions && finalPermissionMode === 'plan') {
         console.log('📝 Skip permissions disabled due to plan mode');
       }
     }
@@ -227,10 +248,21 @@ async function spawnClaude(command, options = {}, ws) {
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
     console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
     
+    // Prepare environment variables for Claude CLI
+    const claudeEnv = { 
+      ...process.env,
+      // Pass through Anthropic API configuration
+      ...(process.env.ANTHROPIC_API_KEY && { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY }),
+      ...(process.env.ANTHROPIC_API_URL && { ANTHROPIC_API_URL: process.env.ANTHROPIC_API_URL }),
+      // Pass through debug settings
+      ...(process.env.DEBUG === 'true' && { DEBUG: 'true' }),
+      ...(process.env.MCP_DEBUG === 'true' && { MCP_DEBUG: 'true' })
+    };
+    
     const claudeProcess = spawn('claude', args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env } // Inherit all environment variables
+      env: claudeEnv
     });
     
     // Attach temp file info to process for cleanup later

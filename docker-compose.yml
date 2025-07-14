@@ -6,11 +6,63 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3002:3002"
+      - "${PORT:-3002}:${PORT:-3002}"
+    env_file:
+      - .env
     environment:
-      - NODE_ENV=production
-      - PORT=3002
+      # System configuration
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-3002}
       - HOME=/home/claude
+      - TZ=${TZ:-UTC}
+      
+      # Claude AI configuration
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_API_URL=${ANTHROPIC_API_URL}
+      - CLAUDE_DEFAULT_MODEL=${CLAUDE_DEFAULT_MODEL}
+      - CLAUDE_PERMISSION_MODE=${CLAUDE_PERMISSION_MODE}
+      - CLAUDE_ADDITIONAL_DIRS=${CLAUDE_ADDITIONAL_DIRS}
+      - CLAUDE_SYSTEM_PROMPT=${CLAUDE_SYSTEM_PROMPT}
+      - CLAUDE_SKIP_PERMISSIONS=${CLAUDE_SKIP_PERMISSIONS}
+      
+      # GitHub integration
+      - GITHUB_USERNAME=${GITHUB_USERNAME}
+      - GITHUB_EMAIL=${GITHUB_EMAIL}
+      - GITHUB_PAT=${GITHUB_PAT}
+      - GITHUB_API_URL=${GITHUB_API_URL}
+      - GITHUB_AUTO_CONFIG=${GITHUB_AUTO_CONFIG:-true}
+      
+      # Git configuration
+      - GIT_USER_NAME=${GIT_USER_NAME}
+      - GIT_USER_EMAIL=${GIT_USER_EMAIL}
+      - GIT_CREDENTIAL_HELPER=${GIT_CREDENTIAL_HELPER:-store}
+      
+      # Security & Authentication
+      - JWT_SECRET=${JWT_SECRET}
+      - API_KEY=${API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      
+      # OpenAI integration (for transcription)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Project discovery
+      - BASE_PROJECTS_FOLDER=${BASE_PROJECTS_FOLDER}
+      
+      # Debugging
+      - DEBUG=${DEBUG:-false}
+      - MCP_DEBUG=${MCP_DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      
+      # Performance settings
+      - FILE_WATCHER_DEBOUNCE=${FILE_WATCHER_DEBOUNCE:-300}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-10485760}
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-24}
+      
+      # Backup settings
+      - BACKUP_INTERVAL=${BACKUP_INTERVAL:-24}
+      - BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-7}
+      - BACKUP_PATH=${BACKUP_PATH:-/app/backups}
+      
     volumes:
       # Mount the Claude projects directory for persistence
       - claude_projects:/home/claude/.claude/projects
@@ -18,9 +70,11 @@ services:
       - claude_database:/app/database
       # Optional: Mount a workspace directory for development
       - ./workspace:/workspace:ro
+      # Mount backup directory if configured
+      - claude_backups:/app/backups
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/api/config', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:${PORT:-3002}/api/config', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,4 +84,6 @@ volumes:
   claude_projects:
     driver: local
   claude_database:
-    driver: local 
+    driver: local
+  claude_backups:
+    driver: local

@@ -43,6 +43,8 @@ import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { autoConfigureGit, getGitConfig, configureGit } from './git-config.js';
+import { testGitHubConnection, getUserRepositories, getAuthenticatedUser } from './github-api.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -174,6 +176,66 @@ app.use('/api/git', authenticateToken, gitRoutes);
 
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
+
+// Git configuration API endpoint
+app.get('/api/git-config', authenticateToken, async (req, res) => {
+  try {
+    const config = await getGitConfig();
+    res.json(config);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update git configuration endpoint
+app.post('/api/git-config', authenticateToken, async (req, res) => {
+  try {
+    const result = await configureGit(req.body);
+    if (result.success) {
+      res.json({ success: true, message: 'Git configuration updated successfully' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GitHub API endpoints
+app.get('/api/github/test', authenticateToken, async (req, res) => {
+  try {
+    const result = await testGitHubConnection();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/github/user', authenticateToken, async (req, res) => {
+  try {
+    const result = await getAuthenticatedUser();
+    if (result.success) {
+      res.json(result.user);
+    } else {
+      res.status(400).json({ error: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/github/repositories', authenticateToken, async (req, res) => {
+  try {
+    const result = await getUserRepositories(req.query);
+    if (result.success) {
+      res.json(result.repositories);
+    } else {
+      res.status(400).json({ error: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -981,6 +1043,9 @@ async function startServer() {
     // Initialize authentication database
     await initializeDatabase();
     console.log('✅ Database initialization skipped (testing)');
+    
+    // Auto-configure git with environment variables
+    await autoConfigureGit();
     
     server.listen(PORT, '0.0.0.0', async () => {
       console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);

@@ -35,7 +35,19 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
+    curl \
     && rm -rf /var/cache/apk/*
+
+# Install GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null || true
+
+# For Alpine, install GitHub CLI differently
+RUN apk add --no-cache github-cli || \
+    (curl -sSL https://github.com/cli/cli/releases/latest/download/gh_*_linux_amd64.tar.gz | tar -xz -C /tmp && \
+     mv /tmp/gh_*/bin/gh /usr/local/bin/ && \
+     rm -rf /tmp/gh_*)
 
 # Create app user
 RUN addgroup -g 1001 -S nodejs
