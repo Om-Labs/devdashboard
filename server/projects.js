@@ -174,6 +174,21 @@ async function getProjects() {
   const projects = [];
   const existingProjects = new Set();
   
+  // Auto-discover projects from base folder if configured
+  if (process.env.BASE_PROJECTS_FOLDER) {
+    try {
+      const discoveredProjects = await discoverProjectsFromBaseFolder(process.env.BASE_PROJECTS_FOLDER);
+      projects.push(...discoveredProjects);
+      
+      // Add discovered project names to existing projects set
+      discoveredProjects.forEach(project => {
+        existingProjects.add(project.name);
+      });
+    } catch (error) {
+      console.error('Error during auto-discovery:', error);
+    }
+  }
+  
   try {
     // First, get existing projects from the file system
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
@@ -234,16 +249,16 @@ async function getProjects() {
         }
       }
       
-              const project = {
-          name: projectName,
-          path: actualProjectDir,
-          displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
-          fullPath: actualProjectDir,
-          isCustomName: !!projectConfig.displayName,
-          isManuallyAdded: true,
-          sessions: []
-        };
-      
+      const project = {
+        name: projectName,
+        path: actualProjectDir,
+        displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+        fullPath: actualProjectDir,
+        isCustomName: !!projectConfig.displayName,
+        isManuallyAdded: true,
+        sessions: []
+      };
+    
       projects.push(project);
     }
   }
@@ -544,14 +559,35 @@ async function deleteProject(projectName) {
   }
 }
 
+// Path mapping function to convert Windows paths to Linux container paths
+function mapWindowsPathToContainer(windowsPath) {
+  // Remove drive letter and convert backslashes to forward slashes
+  const normalizedPath = windowsPath.replace(/^[A-Z]:\\/, '').replace(/\\/g, '/');
+  
+  // Map to the mounted workspace directory
+  return `/workspace/${normalizedPath}`;
+}
+
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
-  const absolutePath = path.resolve(projectPath);
+  let absolutePath;
+  
+  // Check if this is a Windows path (contains drive letter or backslashes)
+  if (projectPath.includes(':\\') || projectPath.includes('\\')) {
+    // Convert Windows path to container path
+    absolutePath = mapWindowsPathToContainer(projectPath);
+    console.log(`🔄 Converting Windows path: ${projectPath} -> ${absolutePath}`);
+  } else {
+    // Use as-is if it's already a Linux path
+    absolutePath = projectPath.startsWith('/') ? projectPath : path.resolve(projectPath);
+  }
   
   try {
     // Check if the path exists
     await fs.access(absolutePath);
+    console.log(`✅ Path exists: ${absolutePath}`);
   } catch (error) {
+    console.error(`❌ Path does not exist: ${absolutePath}`);
     throw new Error(`Path does not exist: ${absolutePath}`);
   }
   
@@ -587,7 +623,6 @@ async function addProjectManually(projectPath, displayName = null) {
   
   await saveProjectConfig(config);
   
-  
   return {
     name: projectName,
     path: absolutePath,
@@ -596,6 +631,90 @@ async function addProjectManually(projectPath, displayName = null) {
     isManuallyAdded: true,
     sessions: []
   };
+}
+
+// Auto-discover projects from a base folder
+async function discoverProjectsFromBaseFolder(baseFolder) {
+  const discoveredProjects = [];
+  
+  try {
+    console.log(`🔍 Scanning base folder for projects: ${baseFolder}`);
+    
+    // Check if base folder exists
+    try {
+      await fs.access(baseFolder);
+    } catch (error) {
+      console.log(`❌ Base folder does not exist: ${baseFolder}`);
+      return discoveredProjects;
+    }
+    
+    // Read all subdirectories in the base folder
+    const entries = await fs.readdir(baseFolder, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const projectPath = path.join(baseFolder, entry.name);
+        
+        // Check if this directory contains a .claude folder or has been used with Claude CLI
+        const claudeDir = path.join(projectPath, '.claude');
+        const hasClaudeDir = await fs.access(claudeDir).then(() => true).catch(() => false);
+        
+        if (hasClaudeDir) {
+          console.log(`✅ Found project with .claude directory: ${entry.name}`);
+          
+          // Generate project name (encode path for use as directory name)
+          const projectName = projectPath.replace(/\//g, '-');
+          
+          // Check if project already exists in config
+          const config = await loadProjectConfig();
+          const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+          
+          try {
+            await fs.access(projectDir);
+            console.log(`⚠️ Project already exists: ${entry.name}`);
+            continue;
+          } catch (error) {
+            if (error.code !== 'ENOENT') {
+              console.error(`❌ Error checking existing project: ${error.message}`);
+              continue;
+            }
+          }
+          
+          if (config[projectName]) {
+            console.log(`⚠️ Project already configured: ${entry.name}`);
+            continue;
+          }
+          
+          // Add to config as auto-discovered project
+          config[projectName] = {
+            autoDiscovered: true,
+            originalPath: projectPath,
+            displayName: entry.name
+          };
+          
+          await saveProjectConfig(config);
+          
+          discoveredProjects.push({
+            name: projectName,
+            path: projectPath,
+            fullPath: projectPath,
+            displayName: entry.name,
+            isAutoDiscovered: true,
+            sessions: []
+          });
+          
+          console.log(`✅ Auto-discovered project: ${entry.name}`);
+        }
+      }
+    }
+    
+    console.log(`🎉 Auto-discovery complete. Found ${discoveredProjects.length} new projects.`);
+    return discoveredProjects;
+    
+  } catch (error) {
+    console.error(`❌ Error during auto-discovery: ${error.message}`);
+    return discoveredProjects;
+  }
 }
 
 
@@ -612,5 +731,6 @@ export {
   loadProjectConfig,
   saveProjectConfig,
   extractProjectDirectory,
-  clearProjectDirectoryCache
+  clearProjectDirectoryCache,
+  discoverProjectsFromBaseFolder
 };

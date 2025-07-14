@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  claude-code-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - HOME=/home/claude
+      - BASE_PROJECTS_FOLDER=/workspace
+    volumes:
+      # Mount the Claude projects directory for persistence
+      - claude_projects:/home/claude/.claude/projects
+      # Mount the database directory for persistence
+      - claude_database:/app/database
+      # Mount your Windows X: drive repositories
+      - /x/Repos:/workspace:ro
+      # Optional: Mount specific project directories individually
+      # - /x/Repos/my-project:/workspace/my-project:ro
+      # - /x/Repos/another-project:/workspace/another-project:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/api/config', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  claude_projects:
+    driver: local
+  claude_database:
+    driver: local 
