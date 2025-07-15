@@ -390,6 +390,169 @@ When the container starts, it automatically:
 2. Create a new secret key
 3. Copy and paste into `OPENAI_API_KEY`
 
+## Automatic Updates with Watchtower
+
+### What is Watchtower?
+
+Watchtower automatically updates your Docker containers when new images are available. This keeps your Claude Code UI installation up-to-date without manual intervention.
+
+### Enabling Watchtower
+
+Watchtower is included but uses Docker profiles for optional activation:
+
+```bash
+# Enable Watchtower with main service
+docker-compose --profile watchtower up -d
+
+# Windows version
+docker-compose -f docker-compose.windows.yml --profile watchtower up -d
+```
+
+### Watchtower Configuration
+
+Configure Watchtower behavior in your `.env` file:
+
+```bash
+# Enable/disable Watchtower
+WATCHTOWER_ENABLE=true
+
+# Update schedule (daily at 3 AM)
+WATCHTOWER_SCHEDULE=0 0 3 * * *
+
+# Clean up old images after updating
+WATCHTOWER_CLEANUP=true
+
+# Notification settings (optional)
+WATCHTOWER_NOTIFICATIONS=shoutrrr
+WATCHTOWER_NOTIFICATION_SLACK_HOOK_URL=https://hooks.slack.com/...
+```
+
+### Notification Options
+
+Watchtower supports multiple notification methods:
+
+#### Slack Notifications
+```bash
+WATCHTOWER_NOTIFICATION_SLACK_HOOK_URL=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+```
+
+#### Discord Notifications  
+```bash
+WATCHTOWER_NOTIFICATION_DISCORD_HOOK_URL=https://discord.com/api/webhooks/YOUR/WEBHOOK
+```
+
+#### Microsoft Teams Notifications
+```bash
+WATCHTOWER_NOTIFICATION_MSTEAMS_HOOK_URL=https://outlook.office.com/webhook/YOUR/TEAMS/WEBHOOK
+```
+
+#### Email Notifications
+```bash
+WATCHTOWER_NOTIFICATION_EMAIL_FROM=watchtower@yourcompany.com
+WATCHTOWER_NOTIFICATION_EMAIL_TO=admin@yourcompany.com
+WATCHTOWER_NOTIFICATION_EMAIL_SERVER=smtp.gmail.com
+WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER=your-email@gmail.com
+WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=your-app-password
+```
+
+### Setting Up Notification Webhooks
+
+#### Microsoft Teams Setup
+1. **Open Microsoft Teams** and navigate to the channel where you want notifications
+2. **Click the three dots** (⋯) next to the channel name
+3. **Select "Connectors"** from the menu
+4. **Find "Incoming Webhook"** and click "Configure"
+5. **Provide a name** for the webhook (e.g., "Watchtower Updates")
+6. **Optionally upload an image** for the webhook
+7. **Click "Create"** and copy the webhook URL
+8. **Add to .env**: `WATCHTOWER_NOTIFICATION_MSTEAMS_HOOK_URL=https://outlook.office.com/webhook/...`
+
+#### Slack Setup
+1. **Go to your Slack workspace** settings
+2. **Navigate to Apps & Integrations** > **Custom Integrations**
+3. **Select "Incoming WebHooks"**
+4. **Choose the channel** for notifications
+5. **Copy the webhook URL** provided
+6. **Add to .env**: `WATCHTOWER_NOTIFICATION_SLACK_HOOK_URL=https://hooks.slack.com/...`
+
+#### Discord Setup
+1. **Open Discord** and go to the channel for notifications
+2. **Click the gear icon** next to the channel name (Edit Channel)
+3. **Go to "Integrations"** tab
+4. **Click "Create Webhook"**
+5. **Configure the webhook** name and avatar
+6. **Copy the webhook URL**
+7. **Add to .env**: `WATCHTOWER_NOTIFICATION_DISCORD_HOOK_URL=https://discord.com/api/webhooks/...`
+
+### Update Strategies
+
+#### Scheduled Updates (Recommended)
+```bash
+# Daily at 3 AM
+WATCHTOWER_SCHEDULE=0 0 3 * * *
+
+# Weekly on Sunday at 2 AM  
+WATCHTOWER_SCHEDULE=0 0 2 * * 0
+
+# Monthly on the 1st at 1 AM
+WATCHTOWER_SCHEDULE=0 0 1 1 * *
+```
+
+#### Immediate Updates
+```bash
+# Check every 5 minutes
+WATCHTOWER_POLL_INTERVAL=300
+WATCHTOWER_SCHEDULE=
+```
+
+#### Manual Updates Only
+```bash
+WATCHTOWER_RUN_ONCE=true
+```
+
+### Security Considerations
+
+- **Docker Socket Access**: Watchtower requires access to `/var/run/docker.sock`
+- **Image Verification**: Only updates from trusted registries
+- **Restart Policy**: Uses graceful shutdowns with configurable timeout
+- **Scope Limiting**: Can be restricted to specific containers
+
+### Advanced Configuration
+
+#### Monitor Specific Containers Only
+```bash
+# Only monitor claude-code-ui container
+WATCHTOWER_SCOPE=claude-code-ui
+```
+
+#### Rolling Restarts
+```bash
+# Restart containers one by one (for zero downtime)
+WATCHTOWER_ROLLING_RESTART=true
+```
+
+#### Debug Mode
+```bash
+# Enable detailed logging
+WATCHTOWER_DEBUG=true
+```
+
+### Usage Commands
+
+```bash
+# Start with Watchtower enabled
+docker-compose --profile watchtower up -d
+
+# Disable Watchtower temporarily
+docker-compose stop watchtower
+
+# Run one-time update check
+docker-compose run --rm watchtower --run-once
+
+# View Watchtower logs
+docker-compose logs watchtower
+```
+
 ## Benefits of This Architecture
 
 1. **No Host Installation Required**: Everything runs in the container
